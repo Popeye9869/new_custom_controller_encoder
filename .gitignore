@@ -19,5 +19,4 @@ CMakeUserPresets.jsonzz
 #cmake-build-*
 
 .DS_Store
-.vscode
 build
