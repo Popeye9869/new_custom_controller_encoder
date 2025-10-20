@@ -19,16 +19,14 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "i2c.h"
-#include "stm32g0xx_hal.h"
-#include "stm32g0xx_hal_uart.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
-#include <stdio.h>
-#include <string.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdio.h>
+#include <string.h>
 
 /* USER CODE END Includes */
 
@@ -103,7 +101,6 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
   MX_TIM1_Init();
-
   /* USER CODE BEGIN 2 */
   mode = reset;
 
@@ -115,13 +112,11 @@ int main(void)
   HAL_UART_AbortReceive_IT(&huart1);
 
   if(mode == reset) //初始化-判断是否为主机
-  {
     mode = master;
-  }
 
   if(mode == master)
   {
-    
+    HAL_TIM_Base_Start_IT(&htim1); //主机启动定时器中断
   }
 
  
@@ -135,7 +130,7 @@ int main(void)
     HAL_I2C_Mem_Read(&hi2c2, 0x36<<1,
                     0x0C, I2C_MEMADD_SIZE_8BIT,
                     RawData, 2, 100);
-    HAL_UART_Transmit(&huart2, (uint8_t *)RawData, 2, HAL_MAX_DELAY);
+    RawAngle = (RawData[0]<<8 | RawData[1]);
     HAL_Delay(500);
     /* USER CODE END WHILE */
 
@@ -194,10 +189,19 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
   if(huart->Instance == USART1 && mode == reset) //初始化-判断是否为从机
   {
-    if(strcmp(Start_pData,"Start\r\n")==0)
+    if(strcmp((char *)Start_pData,"Start\r\n")==0)
       mode = slave;
   }
 }
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if(htim->Instance == TIM1) //主机定时器中断
+  {
+    HAL_UART_Transmit(&huart2, (uint8_t *)&RawAngle, 2, 10);
+  }
+}
+
 /* USER CODE END 4 */
 
 /**
