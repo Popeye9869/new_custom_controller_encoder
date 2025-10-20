@@ -25,6 +25,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -55,6 +56,7 @@ enum {
 uint8_t RawData[2] ={0};
 uint16_t RawAngle = 0;
 uint8_t Start_pData[8] = {0};
+uint16_t Data[10] = {0};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -131,7 +133,7 @@ int main(void)
                     0x0C, I2C_MEMADD_SIZE_8BIT,
                     RawData, 2, 100);
     RawAngle = (RawData[0]<<8 | RawData[1]);
-    HAL_Delay(500);
+    HAL_Delay(5);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
