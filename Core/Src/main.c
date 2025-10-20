@@ -19,8 +19,13 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "i2c.h"
+#include "stm32g0xx_hal.h"
+#include "stm32g0xx_hal_uart.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
+#include <stdio.h>
+#include <string.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -34,7 +39,11 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+enum {
+  reset = 0,
+  master,
+  slave
+} mode;
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -45,7 +54,9 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+uint8_t RawData[2] ={0};
+uint16_t RawAngle = 0;
+uint8_t Start_pData[8] = {0};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -91,14 +102,41 @@ int main(void)
   MX_I2C2_Init();
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
-  /* USER CODE BEGIN 2 */
+  MX_TIM1_Init();
 
+  /* USER CODE BEGIN 2 */
+  mode = reset;
+
+  HAL_UART_Receive_IT(&huart1, Start_pData, 7);
+
+  HAL_UART_Transmit(&huart2, (uint8_t *)"Start\r\n", 7, 50);//发送信号以确定链路起始
+
+  HAL_Delay(1000);
+  HAL_UART_AbortReceive_IT(&huart1);
+
+  if(mode == reset) //初始化-判断是否为主机
+  {
+    mode = master;
+  }
+
+  if(mode == master)
+  {
+    
+  }
+
+ 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+
+    HAL_I2C_Mem_Read(&hi2c2, 0x36<<1,
+                    0x0C, I2C_MEMADD_SIZE_8BIT,
+                    RawData, 2, 100);
+    HAL_UART_Transmit(&huart2, (uint8_t *)RawData, 2, HAL_MAX_DELAY);
+    HAL_Delay(500);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -152,7 +190,14 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if(huart->Instance == USART1 && mode == reset) //初始化-判断是否为从机
+  {
+    if(strcmp(Start_pData,"Start\r\n")==0)
+      mode = slave;
+  }
+}
 /* USER CODE END 4 */
 
 /**
