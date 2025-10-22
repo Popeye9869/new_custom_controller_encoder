@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "dma.h"
 #include "i2c.h"
 #include "tim.h"
 #include "usart.h"
@@ -33,16 +34,19 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
-/* USER CODE END PTD */
-
-/* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
 enum {
   reset = 0,
   master,
   slave
 } mode;
+/* USER CODE END PTD */
+
+/* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
+#define DATA_LENGTH 10
+#define MASTER_SENT_TIME_OUT 30
+#define SLAVE_SENT_TIME_OUT 30
+#define SLAVE_RECEIVE_TIME_OUT 40
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -56,7 +60,7 @@ enum {
 uint8_t RawData[2] ={0};
 uint16_t RawAngle = 0;
 uint8_t Start_pData[8] = {0};
-uint16_t Data[10] = {0};
+uint16_t Data[DATA_LENGTH] = {0};//8个数据，最后一位为传感器链路位置
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -99,6 +103,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_I2C2_Init();
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
@@ -200,7 +205,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if(htim->Instance == TIM1) //主机定时器中断
   {
-    HAL_UART_Transmit(&huart2, (uint8_t *)&RawAngle, 2, 10);
+    HAL_UART_Transmit(&huart2, (uint8_t *)Data, DATA_LENGTH * 2, MASTER_SENT_TIME_OUT);
   }
 }
 
