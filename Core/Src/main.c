@@ -57,8 +57,8 @@ enum {
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-uint8_t RawData[2] ={0};
-uint16_t RawAngle = 0;
+uint8_t RawData[2] ={0};//原始数据
+uint16_t RawAngle = 0;//原始角度值
 uint8_t Start_pData[8] = {0};
 uint16_t Data[DATA_LENGTH] = {0};//8个数据，最后一位为传感器链路位置
 /* USER CODE END PV */
@@ -124,6 +124,11 @@ int main(void)
   if(mode == master)
   {
     HAL_TIM_Base_Start_IT(&htim1); //主机启动定时器中断
+  }
+
+  if(mode == slave)
+  {
+    HAL_UART_Receive_DMA(&huart1, (uint8_t *)Data, DATA_LENGTH*2); //从机启动DMA接收
   }
 
  
@@ -199,12 +204,22 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
     if(strcmp((char *)Start_pData,"Start\r\n")==0)
       mode = slave;
   }
+
+  if(huart->Instance == USART1 && mode == slave) //从机接收完成回调
+  {
+    Data[DATA_LENGTH - 1]++ ; //标记数据链路位置为从机位置
+    Data[Data[DATA_LENGTH - 1]] = RawAngle; //存储数据
+    HAL_UART_Transmit(&huart2, (uint8_t *)Data, DATA_LENGTH * 2, SLAVE_SENT_TIME_OUT);
+  }
+
+
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if(htim->Instance == TIM1) //主机定时器中断
   {
+    Data[0] = RawAngle; //存储数据
     HAL_UART_Transmit(&huart2, (uint8_t *)Data, DATA_LENGTH * 2, MASTER_SENT_TIME_OUT);
   }
 }
