@@ -20,6 +20,9 @@
 #include "main.h"
 #include "dma.h"
 #include "i2c.h"
+#include "stm32g0xx_hal.h"
+#include "stm32g0xx_hal_def.h"
+#include "stm32g0xx_hal_uart.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -60,13 +63,13 @@ enum {
 uint8_t RawData[2] ={0};//原始数据
 uint16_t RawAngle = 0;//原始角度值
 uint8_t Start_pData[8] = {0};
-uint16_t Data[DATA_LENGTH] = {0};//8个数据，最后一位为传感器链路位置
+uint16_t Data[DATA_LENGTH] = {0};//包头0x55AA，DATA_LENGTH-2个数据，最后一位为传感器链路位置
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-
+void CycDataProc(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -109,14 +112,16 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
-  mode = reset;
+  mode = master;
 
-  HAL_UART_Receive_IT(&huart1, Start_pData, 7);
+  // HAL_UART_Receive_IT(&huart1, Start_pData, 8);
 
-  HAL_UART_Transmit(&huart2, (uint8_t *)"Start\r\n", 7, 50);//发送信号以确定链路起始
+  // HAL_Delay(1000);
 
-  HAL_Delay(1000);
-  HAL_UART_AbortReceive_IT(&huart1);
+  // HAL_UART_Transmit(&huart2, (uint8_t *)"Start\r\n", 8, HAL_MAX_DELAY);//发送信号以确定链路起始
+
+  // HAL_Delay(1000);
+  // HAL_UART_AbortReceive_IT(&huart1);
 
   if(mode == reset) //初始化-判断是否为主机
     mode = master;
@@ -197,6 +202,34 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+void CycDataProc(void)
+{
+  // 优化：一次性定位帧头并旋转缓冲区，避免O(n^2)逐字节前移；修正小端字节序匹配
+  uint8_t *p = (uint8_t *)Data;
+  const size_t len = DATA_LENGTH * 2U; // 字节数
+  size_t i = 0;
+
+  // 查找小端序的帧头 0x55AA -> 字节序列 0xAA 0x55
+  while (i + 1 < len) {
+    if (p[i] == 0xAA && p[i + 1] == 0x55) {
+      break;
+    }
+    ++i;
+  }
+
+  // 已对齐或未找到帧头则返回
+  if (i == 0 || i + 1 >= len) {
+    return;
+  }
+
+  // 旋转：把 [i, len) 移到前面，把 [0, i) 追加到末尾
+  uint8_t tmp[DATA_LENGTH * 2U]; // 最大20字节
+  memcpy(tmp, p, i);                 // 保存前 i 字节
+  memmove(p, p + i, len - i);        // 前移剩余数据
+  memcpy(p + (len - i), tmp, i);     // 追加原前缀
+}
+
+
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
   if(huart->Instance == USART1 && mode == reset) //初始化-判断是否为从机
@@ -207,6 +240,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 
   if(huart->Instance == USART1 && mode == slave) //从机接收完成回调
   {
+    CycDataProc(); //循环数据处理
     Data[DATA_LENGTH - 1]++ ; //标记数据链路位置为从机位置
     Data[Data[DATA_LENGTH - 1]] = RawAngle; //存储数据
     HAL_UART_Transmit(&huart2, (uint8_t *)Data, DATA_LENGTH * 2, SLAVE_SENT_TIME_OUT);
@@ -219,7 +253,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if(htim->Instance == TIM1) //主机定时器中断
   {
-    Data[0] = RawAngle; //存储数据
+    Data[0] = 0x55AA; //存储数据
+    Data[1] = RawAngle;
+    Data[DATA_LENGTH - 1] = 1; //标记数据链路位置为主机位置
     HAL_UART_Transmit(&huart2, (uint8_t *)Data, DATA_LENGTH * 2, MASTER_SENT_TIME_OUT);
   }
 }
